@@ -1,0 +1,8 @@
+[workspace]
+members = [
+	"fdpass-rs",
+	"memenpsf",
+	"ipc-queue",
+	"ipc-server",
+	"ipc-client",
+]
