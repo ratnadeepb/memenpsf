@@ -16,7 +16,7 @@
 
 - Despite a reasonably user-friendly API, some care still needs to be taken while programming with this. For example, element sizes and maximum number of elements have to be mentioned.
   - `Interface::<[u8; 2]>::run(...)` explicitly mentions that we will store 2 element u8 arrays in the queue.
-  - `Interface::<&[u8]>::run(name, cap, typ, stream, recvr, sender)` can some times result in a segmentation fault.
+  - `Interface::<&[u8]>::run(...)` can some times result in a segmentation fault.
 
 ## Note
 
