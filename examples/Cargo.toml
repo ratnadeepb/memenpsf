@@ -1,0 +1,5 @@
+[workspace]
+members = [
+	"ipc-server",
+	"ipc-client",
+]
