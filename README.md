@@ -18,6 +18,10 @@
   - `Interface::<[u8; 2]>::run(...)` explicitly mentions that we will store 2 element u8 arrays in the queue.
   - `Interface::<&[u8]>::run(name, cap, typ, stream, recvr, sender)` can some times result in a segmentation fault.
 
+## Note
+
+Currently, the example processes/threads use the `run` function and communicate with the interface through crossbeam channels. However, it is also possible to use the `xmit(), recv() and recv_vectored()` functions directly.
+
 ## Current Issues
 
 - Both client and server run an infinite loop sending and receving data over and over again to make sure that both sides receive data properly.
