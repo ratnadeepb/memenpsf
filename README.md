@@ -20,7 +20,7 @@
 
 ## Note
 
-Currently, the example processes/threads use the `run` function and communicate with the interface through crossbeam channels. However, it is also possible to use the `xmit(), recv() and recv_vectored()` functions directly.
+Currently, the example processes/threads use the `run` function and communicate with the interface through crossbeam channels. However, it is also possible to use the `xmit()`, `recv()` and `recv_vectored()` functions directly.
 
 ## Current Issues
 
