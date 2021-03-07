@@ -1,6 +1,0 @@
-[workspace]
-members = [
-	"ipc-server",
-	"ipc-client",
-	"container-client",
-]

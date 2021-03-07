@@ -8,25 +8,20 @@ RUN USER=root cargo new async_client
 
 # Build the dependencies
 WORKDIR /usr/src/fdpass-rs
-COPY ../../fdpass-rs/Cargo.lock ../../fdpass-rs/Cargo.toml ./
-COPY ../../fdpass-rs/src/ ./src/
+COPY fdpass-rs/ ./
 RUN cargo build
 
 WORKDIR /usr/src/ipc-queue
-COPY ../../ipc-queue/Cargo.lock ../../ipc-queue/Cargo.toml ./
-COPY ../../ipc-queue/src ./src
+COPY ipc-queue/ ./
 RUN cargo build
 
 WORKDIR /usr/src/memenpsf
-COPY ../../memenpsf/Cargo.lock ../../memenpsf/Cargo.toml ./
-COPY ../../memenpsf/src ./src
+COPY memenpsf/ ./
 RUN cargo build
 
 # Build the app
-WORKDIR /usr/src/async_client
-
-COPY ../ipc-client/Cargo.lock ../ipc-client/Cargo.toml ./
-COPY ../ipc-client/src/ ./src/
+WORKDIR /usr/src/ipc-client
+COPY ipc-client/ ./
 
 RUN cargo install --target x86_64-unknown-linux-musl --path .
 

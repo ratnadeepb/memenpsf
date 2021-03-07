@@ -4,3 +4,7 @@ members = [
 	"memenpsf",
 	"ipc-queue",
 ]
+
+exclude = [
+	"examples/",
+]

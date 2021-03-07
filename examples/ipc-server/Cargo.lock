@@ -439,15 +439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipc-client"
-version = "0.1.0"
-dependencies = [
- "crossbeam",
- "memenpsf",
- "rand",
-]
-
-[[package]]
 name = "ipc-queue"
 version = "0.1.0"
 dependencies = [
