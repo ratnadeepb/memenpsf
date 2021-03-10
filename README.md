@@ -7,6 +7,52 @@
 3. `memenpsf`: This crate has two structures that hierarchically wraps around the `ipc-queue` to provide safe, bidirectional communication and an easy to use API. This crate exports functions like `recv`, `recv_vectored` and `xmit` to enable users to start using the IPC without having to figure out all the internal structures.
 4. Examples: `ipc-server` and `ipc-client` are examples of how this shared memory IPC can be used to provide connectivity between two unrelated processes.
 
+## Public API (methods)
+
+Create a new interface with name, size of buffer, control stream and type (client=0, server!=0)
+```Rust
+new(name: String,
+      cap: usize,
+      stream: UnixStream,
+      typ: u8
+) -> Interface<T>
+```
+
+Send a control message over the Unix socket. `msg` is the read and write pointers
+```Rust
+send_ctrl_msg(msg: [u8; 2])
+```
+
+Receive a control message, if any, over the Unix socket.
+```Rust
+recv_ctrl_msg
+```
+
+Transmit a single packet over shared memory
+```Rust
+xmit(buf: T)
+```
+
+Receive a single message over the shared memory
+```Rust
+recv() -> Option<T>
+```
+
+Receive all pending messages over the shared memory
+```Rust
+recv_vectored() -> Option<Vec<T>>
+```
+
+A simple run loop
+```Rust
+run(name: String,           // name of the client
+        cap: usize,         // size of the buffer
+        typ: u8,            // client(0) or server(!=0)
+        stream: UnixStream, // control stream
+        recvr: Receiver<T>, // receive out of the loop
+        sender: Sender<T>)  // send into the loop
+```
+
 ## Advantages
 
 - The processes don't need to be in parent-child or sibling relationship. This crate allows any two processes to communicate with each other.
