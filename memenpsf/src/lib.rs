@@ -5,14 +5,20 @@
 
 use std::{
     cell::RefCell,
-    io::{Read, Result, Write},
+    io::{self, Read, Result, Write},
+    net::Shutdown,
     os::unix::{io::AsRawFd, net::UnixStream},
     ptr,
 };
 
+use fd::FileDesc;
+
+use async_std::prelude::*;
+
 use crossbeam::channel::{Receiver, Sender};
 use ipc_queue::RingBuf;
 use libc::{ftruncate, mmap, MAP_SHARED, PROT_READ, PROT_WRITE};
+use rand::distributions::uniform::UniformChar;
 
 enum HostType {
     Client,
@@ -26,17 +32,85 @@ const READ: u8 = 2;
 
 // const MTU: usize = 1536;
 
+pub trait Stream {
+    fn shutdown(&self);
+    fn s_write(&mut self, buf: &[u8]) -> Result<usize>;
+    fn s_read(&mut self, buf: &mut [u8]) -> Result<usize>;
+    fn s_set_nonblocking(&self, nonblocking: bool) -> Result<()>;
+    fn recv_fd(&mut self) -> io::Result<FileDesc>;
+    fn send_fd(&mut self, fd: i32) -> io::Result<()>;
+}
+
+impl Stream for UnixStream {
+    fn shutdown(&self) {
+        self.shutdown(std::net::Shutdown::Both).unwrap();
+    }
+
+    fn s_write(&mut self, buf: &[u8]) -> Result<usize> {
+        std::io::Write::write(self, buf)
+    }
+
+    fn s_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        std::io::Read::read(self, buf)
+    }
+
+    fn s_set_nonblocking(&self, nonblocking: bool) -> Result<()> {
+        self.set_nonblocking(nonblocking)
+    }
+
+    fn recv_fd(&mut self) -> io::Result<FileDesc> {
+        fdpass::recv_fd(self, vec![0u8])
+    }
+
+    fn send_fd(&mut self, fd: i32) -> io::Result<()> {
+        fdpass::send_fd(self, &[0], &fd)
+    }
+}
+
+impl Stream for async_std::os::unix::net::UnixStream {
+    fn shutdown(&self) {
+        self.shutdown(async_std::net::Shutdown::Both).unwrap();
+    }
+
+    fn s_write(&mut self, buf: &[u8]) -> Result<usize> {
+        async_std::task::block_on(self.write(buf))
+    }
+
+    fn s_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        async_std::task::block_on(self.read(buf))
+    }
+
+    fn s_set_nonblocking(&self, nonblocking: bool) -> Result<()> {
+        Ok(())
+    }
+
+    fn recv_fd(&mut self) -> io::Result<FileDesc> {
+        fdpass::async_recv_fd(self, vec![0u8])
+    }
+
+    fn send_fd(&mut self, fd: i32) -> io::Result<()> {
+        fdpass::async_send_fd(self, &[0], &fd)
+    }
+}
+
 struct MemEnpsf<T: std::fmt::Debug + std::marker::Copy> {
     name: String,
     s2c_q: RingBuf<T>,
     c2s_q: RingBuf<T>,
     cap: usize,
-    stream: UnixStream,
+    stream: Box<dyn Stream>,
 }
 
-impl<'a, T: std::fmt::Debug + std::marker::Copy> MemEnpsf<T> {
-    fn new_srv(name: String, cap: usize, mut stream: UnixStream) -> Self {
-        let fd = fdpass::recv_fd(&mut stream, vec![0u8]).unwrap();
+impl<T: std::fmt::Debug + std::marker::Copy> Drop for MemEnpsf<T> {
+    fn drop(&mut self) {
+        self.stream.shutdown();
+    }
+}
+
+impl<T: std::fmt::Debug + std::marker::Copy> MemEnpsf<T> {
+    fn new_srv(name: String, cap: usize, mut stream: Box<dyn Stream>) -> Self {
+        // let fd = fdpass::recv_fd(&mut stream, vec![0u8]).unwrap();
+        let fd = stream.recv_fd().unwrap();
         unsafe { ftruncate(fd.as_raw_fd(), cap as i64) };
         let shm = unsafe {
             mmap(
@@ -62,11 +136,13 @@ impl<'a, T: std::fmt::Debug + std::marker::Copy> MemEnpsf<T> {
     }
 
     // Create a new interface for client
-    fn new_client(name: String, cap: usize, mut stream: UnixStream) -> Self {
+    // fn new_client(name: String, cap: usize, mut stream: UnixStream) -> Self {
+    fn new_client(name: String, cap: usize, mut stream: Box<dyn Stream>) -> Self {
         println!("new client func");
         let fd = shm_open_anonymous::shm_open_anonymous();
         println!("fd created");
-        if let Err(e) = fdpass::send_fd(&mut stream, &[0], &fd) {
+        // if let Err(e) = fdpass::send_fd(&mut stream, &[0], &fd) {
+        if let Err(e) = stream.recv_fd() {
             println!("Errored out: {:#?}", e);
         }
         println!("fd sent");
@@ -122,7 +198,7 @@ pub struct Interface<T: std::fmt::Debug + std::marker::Copy> {
 }
 
 impl<'a, T: std::fmt::Debug + std::marker::Copy> Interface<T> {
-    pub fn new(name: String, cap: usize, stream: UnixStream, typ: u8) -> Self {
+    pub fn new(name: String, cap: usize, stream: Box<dyn Stream>, typ: u8) -> Self {
         let int;
         let stype;
         if typ == 0 {
@@ -132,6 +208,7 @@ impl<'a, T: std::fmt::Debug + std::marker::Copy> Interface<T> {
         } else {
             stype = HostType::Server;
             int = RefCell::new(MemEnpsf::new_srv(name, cap, stream));
+            println!("new server interface");
         }
         Self { stype, int }
     }
@@ -157,12 +234,12 @@ impl<'a, T: std::fmt::Debug + std::marker::Copy> Interface<T> {
         ctrl_msg[1] = r_or_w; // was a read performed or a write?
         ctrl_msg[2] = msg[0];
         ctrl_msg[3] = msg[1];
-        self.int.borrow_mut().stream.write(&ctrl_msg)
+        self.int.borrow_mut().stream.s_write(&ctrl_msg)
     }
 
     pub fn recv_ctrl_msg(&self) {
         let mut ctrl_msg = [0; 4];
-        let r_or_w = match self.int.borrow_mut().stream.read(&mut ctrl_msg) {
+        let r_or_w = match self.int.borrow_mut().stream.s_read(&mut ctrl_msg) {
             Ok(_) => ctrl_msg[1],
             Err(_) => ERR,
         };
@@ -252,7 +329,7 @@ impl<'a, T: std::fmt::Debug + std::marker::Copy> Interface<T> {
     }
 
     fn run_loop(&self, sender: Sender<T>, recvr: Receiver<T>) {
-        self.int.borrow().stream.set_nonblocking(true).unwrap();
+        self.int.borrow().stream.s_set_nonblocking(true).unwrap();
         println!("run_loop");
         loop {
             self.recv_ctrl_msg();
@@ -294,7 +371,7 @@ impl<'a, T: std::fmt::Debug + std::marker::Copy> Interface<T> {
         name: String,
         cap: usize,
         typ: u8,
-        stream: UnixStream,
+        stream: Box<dyn Stream>,
         recvr: Receiver<T>, // recv data from the process to send out of the interface
         sender: Sender<T>,  // send data to the process received from the interface
     ) {
