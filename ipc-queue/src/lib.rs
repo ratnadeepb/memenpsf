@@ -68,7 +68,7 @@ impl<T: Sized + std::fmt::Debug + std::marker::Copy> RingBuf<T> {
             }
             self.write.store(cur_ind as usize, Ordering::Release);
             std::ptr::write(self.base.offset(cur_ind), elem);
-            println!("pushed: {:#?}", elem);
+            // println!("pushed: {:#?}", elem);
         }
         Ok(())
     }

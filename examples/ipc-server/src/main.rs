@@ -24,7 +24,7 @@ fn main() {
                 let cap = CAP;
                 let typ = 1; // server
                 let mut buf = [0; 30];
-                stream.read(&mut buf).unwrap();
+                    
                 let client_name = String::from_utf8(Vec::from(buf)).unwrap();
                 println!("client name: {}", &client_name);
 
